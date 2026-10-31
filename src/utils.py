@@ -13,31 +13,76 @@ USER_AGENTS = [
 def get_current_date():
     return datetime.now().strftime("%Y-%m-%d %H:%M")
 
+
+def _get_llm_config():
+    """Resolve LLM provider config from environment variables."""
+    provider = os.getenv("LLM_PROVIDER", "openrouter").lower()
+    model = os.getenv("LLM_MODEL", "")
+
+    if provider == "grok":
+        api_key = os.getenv("XAI_API_KEY", "")
+        base_url = "https://api.x.ai/v1"
+        if not model:
+            model = "grok-beta"
+    elif provider == "groq":
+        api_key = os.getenv("GROQ_API_KEY", "")
+        base_url = "https://api.groq.com/openai/v1"
+        if not model:
+            model = "llama-3.1-70b-versatile"
+    elif provider == "openrouter":
+        api_key = os.getenv("OPENROUTER_API_KEY", "")
+        base_url = "https://openrouter.ai/api/v1"
+        if not model:
+            model = "gpt-4.1-mini"
+    elif provider == "openai":
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        base_url = "https://api.openai.com/v1"
+        if not model:
+            model = "gpt-4o-mini"
+    elif provider == "anthropic":
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        base_url = "https://api.anthropic.com/v1"
+        if not model:
+            model = "claude-3-haiku-20240307"
+    else:
+        api_key = os.getenv("OPENROUTER_API_KEY", "")
+        base_url = "https://openrouter.ai/api/v1"
+        if not model:
+            model = "gpt-4.1-mini"
+
+    return provider, api_key, base_url, model
+
+
 async def ainvoke_llm(
-    model,  # Specify the model name from OpenRouter
+    model,
     system_prompt,
     user_message,
     response_format=None,
     temperature=0.1
 ):
+    provider, api_key, base_url, default_model = _get_llm_config()
+    model_name = model or default_model
+
+    if not api_key:
+        raise ValueError(
+            f"No API key found for provider '{provider}'. "
+            f"Set the appropriate key in .env (e.g. XAI_API_KEY for grok, GROQ_API_KEY for groq)."
+        )
+
     llm = ChatOpenAI(
-        model=model, 
+        model=model_name,
         temperature=temperature,
-        openai_api_key=os.getenv("OPENROUTER_API_KEY"),
-        openai_api_base="https://openrouter.ai/api/v1",
+        openai_api_key=api_key,
+        openai_api_base=base_url,
     )
-    
-    # If Response format is provided, use structured output
+
     if response_format:
         llm = llm.with_structured_output(response_format)
-    
-    # Prepare messages
+
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_message}
     ]
-    
-    # Invoke LLM asynchronously
+
     response = await llm.ainvoke(messages)
-    
-    return response if response_format else response.content  # Return structured response or string
+    return response if response_format else response.content
