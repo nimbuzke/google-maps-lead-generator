@@ -76,13 +76,34 @@ async def ainvoke_llm(
         openai_api_base=base_url,
     )
 
-    if response_format:
-        llm = llm.with_structured_output(response_format)
-
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_message}
     ]
+
+    if provider == "groq":
+        # Groq (esp. qwen models) does not reliably support tool-based
+        # structured output (with_structured_output) -> 400 "Failed to generate JSON".
+        # Use plain text completion with JSON instructions instead, then parse.
+        json_instruction = "\n\nIMPORTANT: Respond with ONLY valid JSON, no markdown fences, no extra text."
+        messages[0]["content"] = system_prompt + json_instruction
+        response = await llm.ainvoke(messages)
+        content_text = response.content if hasattr(response, "content") else str(response)
+        if response_format:
+            import json as _json
+            try:
+                return _json.loads(content_text)
+            except (_json.JSONDecodeError, ValueError):
+                # Try to extract JSON from within the text
+                import re
+                m = re.search(r"\{.*\}", content_text, re.DOTALL)
+                if m:
+                    return _json.loads(m.group(0))
+                raise ValueError(f"Could not parse JSON from Groq response: {content_text[:200]}")
+        return content_text
+
+    if response_format:
+        llm = llm.with_structured_output(response_format)
 
     response = await llm.ainvoke(messages)
     return response if response_format else response.content

@@ -2,7 +2,7 @@
 Google Maps Lead Generator — main entry point.
 
 Scrapes local business leads from Google Maps via Serper API, optionally enriches
-them with emails/social media (needs OpenAI/OpenRouter key), saves to Excel, and
+them with emails/social media via the configured LLM provider (default: Groq), saves to Excel, and
 persists to pgvector for semantic retrieval by the Valgist marketing factory.
 
 Usage:
@@ -125,7 +125,9 @@ async def main(
 
     # ── Step 4: Enrich with emails/social (needs OpenAI key) ─
     if enrich:
-        print("\n🤖 Enriching businesses with emails & social media (needs OpenAI key)...")
+        provider = os.getenv("LLM_PROVIDER", "groq")
+        model = os.getenv("LLM_MODEL", "qwen/qwen3.8-27b")
+        print(f"\n🤖 Enriching businesses with emails & social media via {provider} ({model})...")
         try:
             await process_businesses(excel_filename)
             result["enriched"] = len(places)
